@@ -48,6 +48,7 @@ var _ = Describe("Default", func() {
 		os.RemoveAll(td)
 	})
 
+	// TODO(ploubser): These tests all fail and will need rewritten
 	Describe("Configure", func() {
 		It("Should handle malformed jwt", func() {
 			build.ProvisionJWTFile = "testdata/invalid.jwt"

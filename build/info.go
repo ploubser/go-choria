@@ -5,9 +5,12 @@
 package build
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/choria-io/tokens"
 )
 
 type Info struct{}
@@ -342,4 +345,60 @@ func (i *Info) SetProvisionRegistrationData(f string) {
 	defer mu.Unlock()
 
 	ProvisionRegistrationData = f
+}
+
+// SetBuildBasedOnJWT sets build settings based on contents of a JWT file
+func (i *Info) SetBuildBasedOnJWT(jwtContent []byte) (*tokens.ProvisioningClaims, error) {
+	claims, err := tokens.ParseProvisionTokenUnverified(string(jwtContent))
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.Token == "" {
+		return nil, fmt.Errorf("no auth token")
+	}
+
+	if claims.SRVDomain == "" && claims.URLs == "" {
+		return nil, fmt.Errorf("no srv domain or urls")
+	}
+
+	if claims.SRVDomain != "" && claims.URLs != "" {
+		return nil, fmt.Errorf("both srv domain and URLs supplied")
+	}
+
+	i.SetProvisionBrokerURLs(claims.URLs)
+	i.SetProvisionToken(claims.Token)
+	i.SetProvisionBrokerSRVDomain(claims.SRVDomain)
+	i.SetProvisionUsingVersion2(claims.ProtoV2)
+	i.SetProvisionAllowServerUpdate(claims.AllowUpdate)
+
+	if claims.ProvDefault {
+		i.EnableProvisionModeAsDefault()
+	} else {
+		i.DisableProvisionModeAsDefault()
+	}
+
+	if claims.Secure {
+		i.EnableProvisionModeSecurity()
+	} else {
+		i.DisableProvisionModeSecurity()
+	}
+
+	if claims.ProvFacts != "" {
+		i.SetProvisionFacts(claims.ProvFacts)
+	}
+
+	if claims.ProvRegData != "" {
+		i.SetProvisionRegistrationData(claims.ProvRegData)
+	}
+
+	if claims.ProvNatsUser != "" {
+		i.SetProvisioningBrokerUsername(claims.ProvNatsUser)
+	}
+
+	if claims.ProvNatsPass != "" {
+		i.SetProvisioningBrokerPassword(claims.ProvNatsPass)
+	}
+
+	return claims, nil
 }

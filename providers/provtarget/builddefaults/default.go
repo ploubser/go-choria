@@ -6,7 +6,6 @@ package builddefaults
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -15,7 +14,6 @@ import (
 	"github.com/choria-io/go-choria/config"
 	"github.com/choria-io/go-choria/internal/util"
 	"github.com/choria-io/go-choria/srvcache"
-	"github.com/choria-io/tokens"
 	"github.com/sirupsen/logrus"
 
 	"github.com/choria-io/go-choria/backoff"
@@ -55,7 +53,12 @@ func (b *Resolver) Configure(cfg *config.Config, log *logrus.Entry) {
 
 	b.identity = cfg.Identity
 
-	_, err := b.setBuildBasedOnJWT()
+	d, err := os.ReadFile(b.bi.ProvisionJWTFile())
+	if err != nil {
+		return
+	}
+
+	_, err = b.bi.SetBuildBasedOnJWT(d)
 	if err != nil {
 		log.Errorf("Configuration of the provisioner settings based on JWT file %s failed: %s", jwtf, err)
 	}
@@ -111,67 +114,4 @@ func (b *Resolver) Targets(ctx context.Context, log *logrus.Entry) []string {
 	}
 
 	return servers.Strings()
-}
-
-// setBuildBasedOnJWT sets build settings based on contents of a JWT file
-func (b *Resolver) setBuildBasedOnJWT() (*tokens.ProvisioningClaims, error) {
-	bi := b.bi
-
-	d, err := os.ReadFile(bi.ProvisionJWTFile())
-	if err != nil {
-		return nil, err
-	}
-
-	claims, err := tokens.ParseProvisionTokenUnverified(string(d))
-	if err != nil {
-		return nil, err
-	}
-
-	if claims.Token == "" {
-		return nil, fmt.Errorf("no auth token")
-	}
-
-	if claims.SRVDomain == "" && claims.URLs == "" {
-		return nil, fmt.Errorf("no srv domain or urls")
-	}
-
-	if claims.SRVDomain != "" && claims.URLs != "" {
-		return nil, fmt.Errorf("both srv domain and URLs supplied")
-	}
-
-	bi.SetProvisionBrokerURLs(claims.URLs)
-	bi.SetProvisionToken(claims.Token)
-	bi.SetProvisionBrokerSRVDomain(claims.SRVDomain)
-	bi.SetProvisionUsingVersion2(claims.ProtoV2)
-	bi.SetProvisionAllowServerUpdate(claims.AllowUpdate)
-
-	if claims.ProvDefault {
-		bi.EnableProvisionModeAsDefault()
-	} else {
-		bi.DisableProvisionModeAsDefault()
-	}
-
-	if claims.Secure {
-		bi.EnableProvisionModeSecurity()
-	} else {
-		bi.DisableProvisionModeSecurity()
-	}
-
-	if claims.ProvFacts != "" {
-		bi.SetProvisionFacts(claims.ProvFacts)
-	}
-
-	if claims.ProvRegData != "" {
-		bi.SetProvisionRegistrationData(claims.ProvRegData)
-	}
-
-	if claims.ProvNatsUser != "" {
-		bi.SetProvisioningBrokerUsername(claims.ProvNatsUser)
-	}
-
-	if claims.ProvNatsPass != "" {
-		bi.SetProvisioningBrokerPassword(claims.ProvNatsPass)
-	}
-
-	return claims, nil
 }
